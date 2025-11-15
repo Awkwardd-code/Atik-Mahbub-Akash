@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useMediaQuery } from 'react-responsive';
 
 type FooterLink = {
   name: string;
@@ -107,25 +109,85 @@ const orbitStats: OrbitStat[] = [
   { label: 'Shot volume', value: '24 scenes', tag: 'Per experience' },
 ];
 
+const useIsClient = () => {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  return isClient;
+};
+
+const usePrefersReducedMotion = () => {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    handleChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener?.(handleChange);
+    return () => mediaQuery.removeListener?.(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+};
+
 const Footer = () => {
   const currentYear = new Date().getFullYear();
   const handleScrollTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+  const isClient = useIsClient();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const isSmallScreenQuery = useMediaQuery({ maxWidth: 768 });
+  const isTabletScreenQuery = useMediaQuery({ minWidth: 769, maxWidth: 1280 });
+  const isSmallScreen = isClient && isSmallScreenQuery;
+  const isTabletScreen = isClient && isTabletScreenQuery;
+  const animationsEnabled = !prefersReducedMotion;
+  const sectionPaddingClass = isSmallScreen ? 'px-4 py-12' : 'px-6 py-16 lg:py-20';
+  const gridGapClass = isSmallScreen ? 'gap-8' : 'gap-10 lg:gap-12';
+  const highlightGridClass = isSmallScreen ? 'grid-cols-1' : 'sm:grid-cols-2';
+  const orbitGridClass = isSmallScreen ? 'grid-cols-1' : 'sm:grid-cols-2';
+  const footerNavSpacing = isSmallScreen ? 'space-y-12' : 'space-y-16';
+  const highlightTilesWithTransforms = useMemo(() => {
+    if (isSmallScreen) {
+      return highlightTiles.map(tile => ({
+        ...tile,
+        tilt: { x: 0, y: 0 },
+      }));
+    }
+    return highlightTiles;
+  }, [isSmallScreen]);
 
   return (
     <footer className="relative overflow-hidden border-t border-slate-200/60 bg-linear-to-b from-slate-50 to-slate-100 dark:border-slate-700/60 dark:from-slate-900 dark:to-slate-800">
-      <div className="absolute inset-0">
-        <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full bg-cyan-500/5 blur-3xl" />
-        <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-violet-500/5 blur-3xl" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-size-[64px_64px]" />
-        <div className="absolute -top-24 left-1/4 h-48 w-96 -skew-y-6 rounded-[40px] border border-white/5 bg-white/10 shadow-[0_45px_120px_rgba(15,23,42,0.25)] backdrop-blur-2xl" />
-        <div className="absolute -bottom-32 right-1/3 h-56 w-56 rotate-35 rounded-[30px] border border-white/10 bg-linear-to-br from-white/10 via-transparent to-transparent shadow-[0_50px_120px_rgba(15,23,42,0.35)]" />
-      </div>
+      {animationsEnabled && (
+        <div className="absolute inset-0">
+          <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full bg-cyan-500/5 blur-3xl" />
+          <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-violet-500/5 blur-3xl" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-size-[64px_64px]" />
+          <div className="absolute -top-24 left-1/4 h-48 w-96 -skew-y-6 rounded-[40px] border border-white/5 bg-white/10 shadow-[0_45px_120px_rgba(15,23,42,0.25)] backdrop-blur-2xl" />
+          <div className="absolute -bottom-32 right-1/3 h-56 w-56 rotate-35 rounded-[30px] border border-white/10 bg-linear-to-br from-white/10 via-transparent to-transparent shadow-[0_50px_120px_rgba(15,23,42,0.35)]" />
+        </div>
+      )}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-6 py-16 lg:py-20">
-        <div className="space-y-16">
-          <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className={`relative z-10 mx-auto max-w-7xl ${sectionPaddingClass}`}>
+        <div className={footerNavSpacing}>
+          <div className={`grid ${gridGapClass} lg:grid-cols-12`}>
             <div className="space-y-8 lg:col-span-6">
               <div
                 className="inline-block rounded-3xl border border-white/10 bg-white/80 px-6 py-4 shadow-[0_25px_80px_rgba(15,23,42,0.15)] backdrop-blur transition-transform duration-300 hover:-translate-y-1 dark:border-slate-700/70 dark:bg-slate-900/80 transform-gpu"
@@ -146,8 +208,8 @@ const Footer = () => {
               </div>
 
               <div className="relative" style={{ perspective: '1400px' }}>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {highlightTiles.map((tile) => (
+                <div className={`grid gap-4 ${highlightGridClass}`}>
+                  {highlightTilesWithTransforms.map((tile) => (
                     <div
                       key={tile.title}
                       className="group relative overflow-hidden rounded-3xl border border-white/30 bg-white/80 p-4 shadow-[0_30px_80px_rgba(15,23,42,0.25)] transition-transform duration-500 hover:-translate-y-2 hover:rotate-1 dark:border-slate-700/60 dark:bg-slate-900/70 transform-gpu"
@@ -198,7 +260,7 @@ const Footer = () => {
                       Synthesizing narrative, motion, and 3D layers into cohesive worlds that feel tactile and alive.
                     </p>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className={`grid gap-4 ${orbitGridClass}`}>
                     {orbitStats.map((stat) => (
                       <div
                         key={stat.label}
@@ -225,7 +287,7 @@ const Footer = () => {
             </div>
           </div>
 
-          <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+          <div className={`grid ${gridGapClass} lg:grid-cols-12`}>
             <div className="lg:col-span-5">
               <p className="mb-6 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
                 Navigation
@@ -303,7 +365,7 @@ const Footer = () => {
           </div>
         </div>
 
-        <div className="fixed bottom-8 right-8 z-40 hidden md:block">
+        <div className="fixed bottom-6 right-6 z-40 hidden md:block">
           <button
             type="button"
             onClick={handleScrollTop}

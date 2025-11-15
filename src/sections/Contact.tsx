@@ -2,12 +2,13 @@
 'use client';
 
 import emailjs from '@emailjs/browser';
-import { useRef, useState, Suspense, useMemo } from 'react';
+import { useRef, useState, Suspense, useMemo, useEffect } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import Image from 'next/image';
 import { Canvas } from '@react-three/fiber';
 import { PerspectiveCamera, Float, Environment, OrbitControls } from '@react-three/drei';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMediaQuery } from 'react-responsive';
 
 import useAlert from '../hooks/useAlert';
 import Alert from '../components/Alert';
@@ -26,6 +27,53 @@ const emailConfig = {
   templateId: process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID ?? '',
   publicKey: process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY ?? '',
 };
+
+const useIsClient = () => {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  return isClient;
+};
+
+const usePrefersReducedMotion = () => {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    handleChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener?.(handleChange);
+    return () => mediaQuery.removeListener?.(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+};
+
+const ContactCanvasPlaceholder = ({ message }: { message: string }) => (
+  <div className="flex h-full min-h-80 flex-col items-center justify-center gap-4 rounded-4xl border border-white/10 bg-white/70 px-8 py-12 text-center text-slate-600 backdrop-blur-xl dark:bg-slate-900/70 dark:text-slate-300">
+    <div className="rounded-full border border-white/30 bg-cyan-500/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-cyan-500">
+      Preview
+    </div>
+    <h3 className="text-xl font-semibold text-slate-800 dark:text-white">Interactive canvas disabled</h3>
+    <p className="text-sm leading-relaxed">{message}</p>
+  </div>
+);
 
 interface ContactSceneProps {
   focusedField: string | null;
@@ -138,6 +186,31 @@ const Contact = () => {
   const [form, setForm] = useState<ContactFormState>({ name: '', email: '', message: '' });
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const isClient = useIsClient();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const isSmallScreenQuery = useMediaQuery({ maxWidth: 768 });
+  const isMediumScreenQuery = useMediaQuery({ minWidth: 769, maxWidth: 1280 });
+  const isSmallScreen = isClient && isSmallScreenQuery;
+  const isMediumScreen = isClient && isMediumScreenQuery;
+  const animationsEnabled = !prefersReducedMotion;
+  const shouldRenderCanvas = animationsEnabled && !isSmallScreen;
+  const sectionPaddingClass = isSmallScreen ? 'py-14' : 'py-16 lg:py-24';
+  const gridGapClass = isSmallScreen ? 'gap-8' : 'gap-10';
+  const canvasMinHeightClass = isSmallScreen ? 'min-h-[400px]' : 'min-h-[520px]';
+  const placeholderMessage = prefersReducedMotion
+    ? '3D interactions are paused to respect your motion preferences.'
+    : 'This immersive 3D form is best experienced on larger displays.';
+  const particleSettings = useMemo(() => {
+    if (isSmallScreen) {
+      return { count: 450, speed: 0.1, opacity: 0.1, size: 0.9 };
+    }
+
+    if (isMediumScreen) {
+      return { count: 700, speed: 0.11, opacity: 0.12, size: 0.95 };
+    }
+
+    return { count: 900, speed: 0.12, opacity: 0.12, size: 1 };
+  }, [isSmallScreen, isMediumScreen]);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -188,7 +261,10 @@ const Contact = () => {
   };
 
   return (
-    <section className="relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30" id="contact">
+    <section
+      className={`relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 ${sectionPaddingClass}`}
+      id="contact"
+    >
       <AnimatePresence>
         {alert.show && (
           <motion.div
@@ -203,14 +279,16 @@ const Contact = () => {
       </AnimatePresence>
 
       {/* Animated Background Elements */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 -left-20 w-96 h-96 bg-linear-to-r from-blue-400/10 to-purple-500/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-1/3 -right-20 w-80 h-80 bg-linear-to-r from-cyan-400/10 to-indigo-500/10 rounded-full blur-3xl animate-float-delayed" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.1),transparent_70%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-size-[64px_64px] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,black,transparent)]" />
-      </div>
+      {animationsEnabled && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 -left-20 w-96 h-96 bg-linear-to-r from-blue-400/10 to-purple-500/10 rounded-full blur-3xl animate-float" />
+          <div className="absolute bottom-1/3 -right-20 w-80 h-80 bg-linear-to-r from-cyan-400/10 to-indigo-500/10 rounded-full blur-3xl animate-float-delayed" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle_at_center,rgba(120,119,198,0.1),transparent_70%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-size-[64px_64px] mask-[radial-gradient(ellipse_60%_50%_at_50%_50%,black,transparent)]" />
+        </div>
+      )}
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-16 lg:py-24">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -260,50 +338,69 @@ const Contact = () => {
           </motion.p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-10 items-stretch">
+        <div className={`grid lg:grid-cols-2 ${gridGapClass} items-stretch`}>
           {/* 3D Canvas Section */}
           <motion.div
             initial={{ opacity: 0, x: -60 }}
             whileInView={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative h-full min-h-[520px]"
+            className={`relative h-full ${canvasMinHeightClass}`}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
-            <div className="relative h-full min-h-[520px] rounded-4xl overflow-hidden group">
-              <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-4xl shadow-[0_35px_80px_rgba(15,23,42,0.65)]" />
-              <Canvas className="absolute inset-4 rounded-3xl" shadows>
-                <Suspense fallback={<CanvasLoader />}>
-                  <PerspectiveCamera makeDefault position={[0, 2, 16]} fov={50} />
-                  <ambientLight intensity={0.5} />
-                  <directionalLight position={[12, 14, 6]} intensity={0.9} castShadow shadow-mapSize={[2048, 2048]} />
-                  <pointLight position={[-10, -8, 12]} intensity={0.5} color="#8b5cf6" />
-                  <pointLight position={[6, 2, -6]} intensity={0.35} color="#06b6d4" />
-                  <Environment preset="dawn" />
-                  <Particles count={900} speed={0.12} opacity={0.12} size={1} color="#7dd3fc" />
-                  <ContactScene focusedField={focusedField} isHovered={isHovered} />
-                  <OrbitControls
-                    enableZoom={false}
-                    enablePan={false}
-                    autoRotate={!isHovered}
-                    autoRotateSpeed={1.5}
-                    maxPolarAngle={Math.PI / 2}
-                    minPolarAngle={Math.PI / 5}
-                  />
-                </Suspense>
-              </Canvas>
-              <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-white/70 via-transparent to-transparent dark:from-slate-950/60 rounded-4xl" />
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 }}
-                className="absolute bottom-6 left-6 px-4 py-2 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-white/10 shadow-lg"
-              >
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  Interactive 3D Workspace
-                </span>
-              </motion.div>
+            <div className="relative h-full rounded-4xl overflow-hidden group">
+              <div className="absolute inset-0 rounded-4xl border border-white/10 bg-white/80 shadow-[0_35px_80px_rgba(15,23,42,0.65)] backdrop-blur-2xl dark:bg-slate-900/80" />
+              {shouldRenderCanvas ? (
+                <>
+                  <Canvas className="absolute inset-4 rounded-3xl" shadows dpr={[1, 1.5]}>
+                    <Suspense fallback={<CanvasLoader />}>
+                      <PerspectiveCamera makeDefault position={[0, 2, 16]} fov={50} />
+                      <ambientLight intensity={0.5} />
+                      <directionalLight
+                        position={[12, 14, 6]}
+                        intensity={0.9}
+                        castShadow
+                        shadow-mapSize={[2048, 2048]}
+                      />
+                      <pointLight position={[-10, -8, 12]} intensity={0.5} color="#8b5cf6" />
+                      <pointLight position={[6, 2, -6]} intensity={0.35} color="#06b6d4" />
+                      <Environment preset="dawn" />
+                      <Particles
+                        count={particleSettings.count}
+                        speed={particleSettings.speed}
+                        opacity={particleSettings.opacity}
+                        size={particleSettings.size}
+                        color="#7dd3fc"
+                      />
+                      <ContactScene focusedField={focusedField} isHovered={isHovered} />
+                      <OrbitControls
+                        enableZoom={false}
+                        enablePan={false}
+                        autoRotate={!isHovered && animationsEnabled}
+                        autoRotateSpeed={1.5}
+                        maxPolarAngle={Math.PI / 2}
+                        minPolarAngle={Math.PI / 5}
+                      />
+                    </Suspense>
+                  </Canvas>
+                  <div className="pointer-events-none absolute inset-0 rounded-4xl bg-linear-to-t from-white/70 via-transparent to-transparent dark:from-slate-950/60" />
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    className="absolute bottom-6 left-6 rounded-full border border-white/10 bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 shadow-lg backdrop-blur-sm dark:bg-slate-800/90 dark:text-slate-300"
+                  >
+                    <span className="flex items-center gap-2">
+                      <div className="w-2 h-2 animate-pulse rounded-full bg-green-500" />
+                      Interactive 3D Workspace
+                    </span>
+                  </motion.div>
+                </>
+              ) : (
+                <div className="absolute inset-4">
+                  <ContactCanvasPlaceholder message={placeholderMessage} />
+                </div>
+              )}
             </div>
           </motion.div>
 

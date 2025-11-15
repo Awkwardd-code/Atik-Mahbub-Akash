@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
 import type { Variants, Transition } from 'framer-motion';
+import { useMediaQuery } from 'react-responsive';
 
 import AmbientCanvas3D from '../components/AmbientCanvas3D';
 import { clientReviews } from '../constants';
@@ -33,11 +34,90 @@ const slideVariants: Variants = {
   }),
 };
 
+const useIsClient = () => {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  return isClient;
+};
+
+const usePrefersReducedMotion = () => {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    handleChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener?.(handleChange);
+    return () => mediaQuery.removeListener?.(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+};
+
 const Clients = () => {
   const sectionRef = useRef(null);
   const isInView = useInView(sectionRef, { once: true, amount: 0.3 });
   const [activeIndex, setActiveIndex] = useState(0);
   const [direction, setDirection] = useState(1);
+  const isClient = useIsClient();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const isSmallScreenQuery = useMediaQuery({ maxWidth: 768 });
+  const isTabletScreenQuery = useMediaQuery({ minWidth: 769, maxWidth: 1280 });
+  const isSmallScreen = isClient && isSmallScreenQuery;
+  const isTabletScreen = isClient && isTabletScreenQuery;
+  const sectionPaddingClass = isSmallScreen ? 'py-16' : 'py-20 lg:py-24';
+  const headerSpacingClass = isSmallScreen ? 'mb-16' : 'mb-24';
+  const sliderPaddingClass = isSmallScreen ? 'p-6' : 'p-8 lg:p-12';
+  const sliderHeightClass = isSmallScreen ? 'h-[420px]' : 'h-[400px] lg:h-[350px]';
+  const sliderFlexDirectionClass = isSmallScreen ? 'flex-col' : 'flex-col lg:flex-row';
+  const animationsEnabled = !prefersReducedMotion;
+  const ambientSettings = useMemo(() => {
+    if (!animationsEnabled) {
+      return null;
+    }
+
+    if (isSmallScreen) {
+      return {
+        particleCount: 320,
+        particleSpeed: 0.02,
+        particleOpacity: 0.06,
+        shapesCount: 4,
+      };
+    }
+
+    if (isTabletScreen) {
+      return {
+        particleCount: 480,
+        particleSpeed: 0.025,
+        particleOpacity: 0.07,
+        shapesCount: 6,
+      };
+    }
+
+    return {
+      particleCount: 600,
+      particleSpeed: 0.03,
+      particleOpacity: 0.08,
+      shapesCount: 8,
+    };
+  }, [animationsEnabled, isSmallScreen, isTabletScreen]);
 
   const totalReviews = clientReviews.length;
 
@@ -56,21 +136,25 @@ const Clients = () => {
   return (
     <section 
       ref={sectionRef}
-      className="relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 py-20"
+      className={`relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 ${sectionPaddingClass}`}
     >
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 -left-12 w-80 h-80 bg-cyan-500/15 rounded-full blur-3xl animate-float-slow" />
-        <div className="absolute bottom-1/3 -right-16 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-float" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl animate-pulse-slow" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[64px_64px] mask-[radial-gradient(ellipse_80%_50%_at_50%_50%,black,transparent)]" />
-      </div>
+      {animationsEnabled && (
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute top-1/4 -left-12 w-80 h-80 bg-cyan-500/15 rounded-full blur-3xl animate-float-slow" />
+          <div className="absolute bottom-1/3 -right-16 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-float" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl animate-pulse-slow" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[64px_64px] mask-[radial-gradient(ellipse_80%_50%_at_50%_50%,black,transparent)]" />
+        </div>
+      )}
 
-      <AmbientCanvas3D 
-        particleCount={600}
-        particleSpeed={0.03}
-        particleOpacity={0.08}
-        shapesCount={8}
-      />
+      {ambientSettings && (
+        <AmbientCanvas3D 
+          particleCount={ambientSettings.particleCount}
+          particleSpeed={ambientSettings.particleSpeed}
+          particleOpacity={ambientSettings.particleOpacity}
+          shapesCount={ambientSettings.shapesCount}
+        />
+      )}
 
       <div className="relative z-10 max-w-7xl mx-auto">
         {/* Modern Header */}
@@ -78,7 +162,7 @@ const Clients = () => {
           initial={{ opacity: 0, y: 60 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 60 }}
           transition={{ duration: 1 }}
-          className="text-center mb-24"
+          className={`text-center ${headerSpacingClass}`}
         >
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
@@ -144,7 +228,7 @@ const Clients = () => {
           >
             {/* Main Slider Card */}
             <motion.div
-              className="relative rounded-[40px] overflow-hidden"
+              className="relative rounded-4xl lg:rounded-[40px] overflow-hidden"
               whileHover={{ rotateX: 2, rotateY: -2 }}
               transition={{ type: 'spring', stiffness: 120, damping: 20 }}
               style={{ transformStyle: 'preserve-3d' }}
@@ -165,12 +249,12 @@ const Clients = () => {
                 <div className="w-full h-full bg-slate-950 rounded-[40px]" />
               </div>
 
-              <div className="relative p-8 lg:p-12">
-                <div className="relative h-[400px] lg:h-[350px] flex items-center" style={{ transformStyle: 'preserve-3d' }}>
+              <div className={`relative ${sliderPaddingClass}`}>
+                <div className={`relative ${sliderHeightClass} flex items-center`} style={{ transformStyle: 'preserve-3d' }}>
                   <AnimatePresence initial={false} custom={direction} mode="wait">
                     <motion.div
                       key={clientReviews[activeIndex].id}
-                      className="absolute inset-0 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-12"
+                      className={`absolute inset-0 flex ${sliderFlexDirectionClass} items-center justify-between gap-8 lg:gap-12`}
                       custom={direction}
                       variants={slideVariants}
                       initial="enter"
@@ -178,11 +262,11 @@ const Clients = () => {
                       exit="exit"
                     >
                       {/* Content Side */}
-                      <div className="flex-1 space-y-8">
+                      <div className="flex-1 space-y-6 lg:space-y-8">
                         {/* Quote */}
                         <div className="relative">
                           <div className="absolute -left-4 -top-4 text-6xl text-violet-400/20 font-serif">&ldquo;</div>
-                          <p className="text-2xl lg:text-3xl text-slate-100 leading-relaxed font-light pl-8">
+                          <p className="text-xl sm:text-2xl lg:text-3xl text-slate-100 leading-relaxed font-light pl-8">
                             &ldquo;{clientReviews[activeIndex].review}&rdquo;
                           </p>
                         </div>

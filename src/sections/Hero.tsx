@@ -97,6 +97,33 @@ const useSectionScroll = () =>
     }
   }, []);
 
+const usePrefersReducedMotion = () => {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    handleChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener?.(handleChange);
+    return () => mediaQuery.removeListener?.(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+};
+
 // Error Boundary for 3D Canvas
 class Canvas3DErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -160,6 +187,23 @@ const SafeCanvasLoader = ({ error }: { error?: boolean }) => {
   return <CanvasLoader />;
 };
 
+const ResponsiveCanvasPlaceholder = ({ showTechLogos = true }: { showTechLogos?: boolean }) => (
+  <div className="flex h-full flex-col justify-between rounded-2xl border border-white/5 bg-linear-to-br from-slate-900/60 via-slate-900/40 to-slate-800/40 px-6 py-8 text-center lg:text-left">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">Immersive Preview</p>
+      <p className="mt-3 text-lg font-semibold text-white">Optimized for mobile viewing</p>
+      <p className="mt-2 text-sm text-slate-300">
+        The interactive 3D scene unlocks on larger screens or when motion preferences allow it.
+      </p>
+    </div>
+    {showTechLogos && (
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+        {safeRender(() => <HeroTechLogos />, heroLogosFallback)}
+      </div>
+    )}
+  </div>
+);
+
 interface HeroProps {
   className?: string;
 }
@@ -169,6 +213,7 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
   const [canvasError, setCanvasError] = useState(false);
   const isClient = useIsClient();
   const scrollToSection = useSectionScroll();
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   // Safe media queries - must be called at top level
   const isSmallQuery = useMediaQuery({ maxWidth: 440 });
@@ -182,6 +227,49 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
 
   // Safe size calculation with fallbacks
   const sizes = useHeroSizes(!!isSmall, !!isMobile, !!isTablet);
+  const sectionPaddingClass = isSmall ? 'pb-20' : isMobile ? 'pb-28' : 'pb-32 xl:pb-40';
+  const textSpacingClass = isSmall ? 'space-y-6' : 'space-y-8';
+  const gridGapClass = isSmall ? 'gap-10' : 'gap-12';
+  const canvasHeightClass = isSmall ? 'h-[340px]' : isMobile ? 'h-[460px] md:h-[520px]' : 'h-96 lg:h-[600px]';
+  const statsWrapperClass = isSmall
+    ? 'grid grid-cols-2 gap-6 pt-4 border-t border-slate-800'
+    : 'flex flex-wrap gap-8 pt-4 border-t border-slate-800';
+  const shouldRenderInteractiveCanvas = !prefersReducedMotion && !isSmall;
+  const sceneVisuals = useMemo(
+    () => {
+      if (isSmall) {
+        return {
+          particleCount: 480,
+          particleSpeed: 0.12,
+          particleOpacity: 0.25,
+          particleSize: 1,
+          floatingCount: 3,
+          shapeSpread: 14,
+        };
+      }
+
+      if (isMobile) {
+        return {
+          particleCount: 800,
+          particleSpeed: 0.14,
+          particleOpacity: 0.28,
+          particleSize: 1.1,
+          floatingCount: 4,
+          shapeSpread: 18,
+        };
+      }
+
+      return {
+        particleCount: 1200,
+        particleSpeed: 0.15,
+        particleOpacity: 0.3,
+        particleSize: 1.2,
+        floatingCount: 6,
+        shapeSpread: 20,
+      };
+    },
+    [isSmall, isMobile],
+  );
 
   // Canvas error handler
   const handleCanvasError = useCallback(() => {
@@ -223,7 +311,7 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
 
   return (
     <section 
-      className={`relative min-h-screen flex items-center justify-center overflow-visible bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 pb-32 xl:pb-40 ${className}`}
+      className={`relative min-h-screen flex items-center justify-center overflow-visible bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 ${sectionPaddingClass} ${className}`}
       id="home"
     >
       {/* Enhanced Background Effects */}
@@ -239,9 +327,9 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
 
       {/* Main Content Container */}
       <div className="relative z-10 w-full max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <div className={`grid lg:grid-cols-2 ${gridGapClass} items-center`}>
           {/* Text Content */}
-          <div className="flex flex-col space-y-8">
+          <div className={`flex flex-col ${textSpacingClass}`}>
             {/* Status Badge */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm font-medium backdrop-blur-md transition-all hover:bg-white/10 hover:border-white/20">
@@ -324,7 +412,7 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
             </div>
 
             {/* Stats */}
-            <div className="flex flex-wrap gap-8 pt-4 border-t border-slate-800">
+            <div className={statsWrapperClass}>
               {HERO_STATS.map(stat => (
                 <div key={stat.label} className="text-center group cursor-default">
                   <p className="text-3xl font-bold text-white mb-1 group-hover:scale-110 transition-transform duration-300">
@@ -346,11 +434,11 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
           </div>
 
           {/* 3D Canvas Section */}
-          <div className="relative h-96 lg:h-[600px] rounded-2xl overflow-hidden border border-slate-800/50 bg-linear-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm">
-            <Canvas3DErrorBoundary fallback={canvasError ? <CanvasFallback /> : null}>
+          <div className={`relative ${canvasHeightClass} rounded-2xl overflow-hidden border border-slate-800/50 bg-linear-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm`}>
+            <Canvas3DErrorBoundary fallback={<CanvasFallback />}>
               {canvasError ? (
                 <CanvasFallback />
-              ) : (
+              ) : shouldRenderInteractiveCanvas ? (
                 <Canvas 
                   className="w-full h-full"
                   gl={{ 
@@ -386,8 +474,13 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
                     {/* Scene Elements - Wrapped in try-catch logic */}
                     {!canvasError && (
                       <>
-                        <Particles count={1200} speed={0.15} opacity={0.3} size={1.2} />
-                        <FloatingShapes count={6} spread={20} />
+                        <Particles
+                          count={sceneVisuals.particleCount}
+                          speed={sceneVisuals.particleSpeed}
+                          opacity={sceneVisuals.particleOpacity}
+                          size={sceneVisuals.particleSize}
+                        />
+                        <FloatingShapes count={sceneVisuals.floatingCount} spread={sceneVisuals.shapeSpread} />
                         <HeroBackground3D />
                         
                         <HeroCamera isMobile={!!isMobile}>
@@ -408,19 +501,23 @@ const Hero: FC<HeroProps> = ({ className = '' }) => {
                     )}
                   </Suspense>
                 </Canvas>
+              ) : (
+                <ResponsiveCanvasPlaceholder showTechLogos />
               )}
             </Canvas3DErrorBoundary>
             
             {/* Tech logos overlay for the visual panel */}
-            <div className="absolute inset-0 hidden lg:flex items-start justify-center px-8 pt-8 pb-10 z-10 pointer-events-none">
-              <div className="max-w-md w-full pointer-events-auto space-y-4">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 pt-6">
-                  <span className="text-slate-200/80">Core Stack</span>
-                  <span className="text-slate-500/80">2024</span>
+            {shouldRenderInteractiveCanvas && (
+              <div className="absolute inset-0 hidden lg:flex items-start justify-center px-8 pt-8 pb-10 z-10 pointer-events-none">
+                <div className="max-w-md w-full pointer-events-auto space-y-4">
+                  <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 pt-6">
+                    <span className="text-slate-200/80">Core Stack</span>
+                    <span className="text-slate-500/80">2024</span>
+                  </div>
+                  {safeRender(() => <HeroTechLogos />)}
                 </div>
-                {safeRender(() => <HeroTechLogos />)}
               </div>
-            </div>
+            )}
             
             {/* Canvas Overlay Gradient */}
             <div className="absolute inset-0 pointer-events-none bg-linear-to-t from-slate-900/20 via-transparent to-slate-900/10" />

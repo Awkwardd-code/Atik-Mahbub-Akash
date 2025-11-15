@@ -3,12 +3,13 @@
 // Import React Three Fiber compatibility fix for React 19
 import '../lib/reactThreeCompat';
 
-import React, { FC, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { FC, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { Canvas } from '@react-three/fiber';
 import { Float, OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useMediaQuery } from 'react-responsive';
 
 import AmbientCanvas3D from '../components/AmbientCanvas3D';
 import Button from '../components/Button';
@@ -43,6 +44,43 @@ const COLORS = {
     tertiary: '#64748b',
   }
 } as const;
+
+const useIsClient = () => {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  return isClient;
+};
+
+const usePrefersReducedMotion = () => {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    handleChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener?.(handleChange);
+    return () => mediaQuery.removeListener?.(handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+};
 
 // Animation Configs
 const STAGGER_CHILDREN = {
@@ -134,10 +172,89 @@ const InfoPill: FC<{ children: React.ReactNode; index: number }> = ({ children, 
   </motion.span>
 );
 
+const ScenePlaceholder: FC<{
+  title: string;
+  description: string;
+  align?: 'center' | 'start';
+  children?: React.ReactNode;
+}> = ({ title, description, align = 'center', children }) => {
+  const alignmentClasses = align === 'center' ? 'items-center text-center' : 'items-start text-left';
+
+  return (
+    <div
+      className={`flex h-full w-full flex-col justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-6 py-8 backdrop-blur-md ${alignmentClasses}`}
+    >
+      <div className="rounded-full bg-cyan-500/10 p-3 text-cyan-300">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M12 6V12L16 14"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-base font-semibold text-white">{title}</p>
+        <p className="text-sm text-slate-300">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+};
+
 const About: FC = () => {
   const [hasCopied, setHasCopied] = useState(false);
   const [isSkillsSceneReady, setIsSkillsSceneReady] = useState(false);
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isClient = useIsClient();
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const isSmallScreenQuery = useMediaQuery({ maxWidth: 640 });
+  const isTabletScreenQuery = useMediaQuery({ minWidth: 641, maxWidth: 1024 });
+  const isSmallScreen = isClient && isSmallScreenQuery;
+  const isTabletScreen = isClient && isTabletScreenQuery;
+
+  const sectionSpacingClass = isSmallScreen ? 'py-16' : 'py-20 lg:py-24';
+  const headerSpacingClass = isSmallScreen ? 'mb-12' : 'mb-16 lg:mb-24';
+  const gridGapClass = isSmallScreen ? 'gap-5' : 'gap-6';
+  const autoRowClass = isSmallScreen ? 'auto-rows-[minmax(260px,auto)]' : 'auto-rows-[minmax(300px,auto)]';
+  const skillsCanvasHeightClass = isSmallScreen ? 'min-h-[240px]' : 'min-h-[300px]';
+  const globeDimensions = isSmallScreen ? 240 : isTabletScreen ? 280 : 320;
+  const shouldRenderSkillsScene = isSkillsSceneReady && !prefersReducedMotion && !isSmallScreen;
+  const shouldRenderGlobe = !prefersReducedMotion;
+
+  const ambientSettings = useMemo(() => {
+    if (prefersReducedMotion) {
+      return null;
+    }
+
+    if (isSmallScreen) {
+      return {
+        particleCount: 160,
+        particleSpeed: 0.02,
+        particleOpacity: 0.08,
+        shapesCount: 2,
+      };
+    }
+
+    if (isTabletScreen) {
+      return {
+        particleCount: 220,
+        particleSpeed: 0.025,
+        particleOpacity: 0.09,
+        shapesCount: 3,
+      };
+    }
+
+    return {
+      particleCount: 300,
+      particleSpeed: 0.03,
+      particleOpacity: 0.1,
+      shapesCount: 4,
+    };
+  }, [isSmallScreen, isTabletScreen, prefersReducedMotion]);
 
   const handleCopy = useCallback(async () => {
     if (!navigator?.clipboard) return;
@@ -168,16 +285,18 @@ const About: FC = () => {
 
   return (
     <section
-      className="relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 py-20"
+      className={`relative min-h-screen overflow-hidden bg-linear-to-br from-slate-900 via-slate-900 to-blue-900/30 px-4 sm:px-6 lg:px-8 ${sectionSpacingClass}`}
       id="about"
     >
-      <AmbientCanvas3D
-        particleCount={300}
-        particleSpeed={0.03}
-        particleOpacity={0.1}
-        shapesCount={4}
-        className="absolute inset-0 -z-10 pointer-events-none"
-      />
+      {ambientSettings && (
+        <AmbientCanvas3D
+          particleCount={ambientSettings.particleCount}
+          particleSpeed={ambientSettings.particleSpeed}
+          particleOpacity={ambientSettings.particleOpacity}
+          shapesCount={ambientSettings.shapesCount}
+          className="absolute inset-0 -z-10 pointer-events-none"
+        />
+      )}
 
       <GradientBackground />
 
@@ -188,7 +307,7 @@ const About: FC = () => {
           whileInView="animate"
           viewport={{ once: true }}
           variants={STAGGER_CHILDREN}
-          className="text-center mb-16 lg:mb-24"
+          className={`text-center ${headerSpacingClass}`}
         >
           <motion.p 
             variants={FADE_UP_VARIANTS}
@@ -221,7 +340,7 @@ const About: FC = () => {
           whileInView="animate"
           viewport={{ once: true }}
           variants={STAGGER_CHILDREN}
-          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-[minmax(300px,auto)]"
+          className={`grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 ${gridGapClass} ${autoRowClass}`}
         >
           {/* Profile Card */}
           <Card className="xl:col-span-1">
@@ -251,8 +370,8 @@ const About: FC = () => {
           {/* Skills Visualization */}
           <Card className="lg:col-span-2" hoverColor={COLORS.secondary}>
             <div className="relative z-10 h-full flex flex-col lg:flex-row gap-8">
-              <div className="flex-1 relative min-h-[300px] rounded-2xl overflow-hidden border border-slate-800/60 bg-slate-900/40">
-                {isSkillsSceneReady ? (
+              <div className={`flex-1 relative ${skillsCanvasHeightClass} rounded-2xl overflow-hidden border border-slate-800/60 bg-slate-900/40`}>
+                {shouldRenderSkillsScene ? (
                   <Canvas className="rounded-2xl" performance={{ min: 0.8 }}>
                     <Suspense fallback={<CanvasLoader />}>
                       <PerspectiveCamera makeDefault position={[0, 0, 12]} />
@@ -275,9 +394,14 @@ const About: FC = () => {
                     </Suspense>
                   </Canvas>
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-                    Preparing 3D canvas...
-                  </div>
+                  <ScenePlaceholder
+                    title="Interactive scene paused"
+                    description={
+                      prefersReducedMotion
+                        ? '3D motion is disabled to honor your system preference.'
+                        : 'The full 3D experience shines on larger screens.'
+                    }
+                  />
                 )}
               </div>
               
@@ -303,24 +427,31 @@ const About: FC = () => {
             <div className="relative z-10 h-full flex flex-col lg:flex-row gap-8 items-center">
               <div className="flex-1 relative h-80 rounded-2xl overflow-hidden">
                 <div className="absolute inset-0 bg-linear-to-br from-cyan-500/10 to-blue-500/10 rounded-2xl" />
-                <Globe
-                  height={320}
-                  width={320}
-                  backgroundColor="rgba(0, 0, 0, 0)"
-                  showAtmosphere
-                  showGraticules
-                  atmosphereColor="rgba(100, 200, 255, 0.2)"
-                  globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-                  bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-                  labelsData={[{ 
-                    lat: 45.33, 
-                    lng: 14.45, 
-                    text: 'Rijeka, Croatia', 
-                    color: COLORS.primary, 
-                    size: 18,
-                    textColor: COLORS.primary
-                  }]}
-                />
+                {shouldRenderGlobe ? (
+                  <Globe
+                    height={globeDimensions}
+                    width={globeDimensions}
+                    backgroundColor="rgba(0, 0, 0, 0)"
+                    showAtmosphere
+                    showGraticules
+                    atmosphereColor="rgba(100, 200, 255, 0.2)"
+                    globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+                    bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+                    labelsData={[{ 
+                      lat: 45.33, 
+                      lng: 14.45, 
+                      text: 'Rijeka, Croatia', 
+                      color: COLORS.primary, 
+                      size: 18,
+                      textColor: COLORS.primary
+                    }]}
+                  />
+                ) : (
+                  <ScenePlaceholder
+                    title="Globe animation disabled"
+                    description="Global collaboration stays the same—motion is just toned down per your system settings."
+                  />
+                )}
               </div>
               
               <div className="flex-1 flex flex-col justify-center">
@@ -404,8 +535,6 @@ const About: FC = () => {
           {/* Contact Card */}
           <Card className="xl:col-span-1 lg:col-span-2 xl:col-start-3">
             <div className="relative z-10 h-full flex flex-col gap-8 lg:flex-row lg:items-stretch">
-              
-            
               <div className="flex-1 flex flex-col items-center justify-center gap-6 lg:items-start">
                 <div className="relative rounded-2xl overflow-hidden w-28 h-28 lg:w-32 lg:h-32">
                   <Image 
